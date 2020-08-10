@@ -136,6 +136,19 @@ function isStatic(node) {
 }
 
 function * sourceRangesOfArguments(sourceCode, callExpression) {
+	function rangeBetween(previous, next) {
+		return [
+			sourceCode.getTokenAfter(
+				previous,
+				{includeComments: true}
+			).range[0],
+			sourceCode.getTokenBefore(
+				next,
+				{includeComments: true}
+			).range[1]
+		];
+	}
+
 	const openingParen = sourceCode.getTokenAfter(
 		callExpression.callee,
 		{filter: token => isOpeningParenToken(token)}
@@ -143,34 +156,38 @@ function * sourceRangesOfArguments(sourceCode, callExpression) {
 
 	const closingParen = sourceCode.getLastToken(callExpression);
 
-	for (const [index, argument] of callExpression.arguments.map(
-		(argument, index) => [index, argument])
-	) {
-		const previousToken = index === 0 ?
-			openingParen :
-			sourceCode.getTokenBefore(
-				argument,
-				{filter: token => isCommaToken(token)}
-			);
-
-		const nextToken = index === callExpression.arguments.length - 1 ?
-			closingParen :
+	if (callExpression.arguments.length === 1) {
+		yield rangeBetween(openingParen, closingParen);
+	} else if (callExpression.arguments.length > 1) {
+		yield rangeBetween(
+			openingParen,
 			sourceCode.getTokenAfter(
+				callExpression.arguments[0],
+				{filter: token => isCommaToken(token)}
+			)
+		);
+
+		for (const argument of callExpression.arguments.slice(1, -1)) {
+			const previousToken = sourceCode.getTokenBefore(
 				argument,
 				{filter: token => isCommaToken(token)}
 			);
 
-		const firstToken = sourceCode.getTokenAfter(
-			previousToken,
-			{includeComments: true}
-		);
+			const nextToken = sourceCode.getTokenAfter(
+				argument,
+				{filter: token => isCommaToken(token)}
+			);
 
-		const lastToken = sourceCode.getTokenBefore(
-			nextToken,
-			{includeComments: true}
-		);
+			yield rangeBetween(previousToken, nextToken);
+		}
 
-		yield [firstToken.range[0], lastToken.range[1]];
+		yield rangeBetween(
+			sourceCode.getTokenBefore(
+				callExpression.arguments[1],
+				{filter: token => isCommaToken(token)}
+			),
+			closingParen
+		);
 	}
 }
 
